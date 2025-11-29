@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/rafa/next/internal/crypto"
+	"github.com/reitmas32/next/internal/crypto"
 )
 
 var (

@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/rafa/next/internal/config"
+	"github.com/reitmas32/next/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -91,4 +91,3 @@ func maskToken(token string) string {
 
 	return fmt.Sprintf("%s%s%s", prefix, masked, suffix)
 }
-

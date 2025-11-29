@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/rafa/next/internal/api"
-	"github.com/rafa/next/internal/config"
-	"github.com/rafa/next/internal/git"
+	"github.com/reitmas32/next/internal/api"
+	"github.com/reitmas32/next/internal/config"
+	"github.com/reitmas32/next/internal/git"
 	"github.com/spf13/cobra"
 )
 

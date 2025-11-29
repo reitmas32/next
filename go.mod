@@ -1,4 +1,4 @@
-module github.com/rafa/next
+module github.com/reitmas32/next
 
 go 1.22
 

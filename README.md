@@ -5,13 +5,13 @@ CLI de gestión de librerías Go privadas y versionado.
 ## Instalación
 
 ```bash
-go install github.com/rafa/next@latest
+go install github.com/reitmas32/next@latest
 ```
 
 O compilar desde el código fuente:
 
 ```bash
-git clone https://github.com/rafa/next.git
+git clone https://github.com/reitmas32/next.git
 cd next
 go build -o next .
 ```

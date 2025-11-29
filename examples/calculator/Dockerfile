@@ -1,5 +1,12 @@
 # Dockerfile para calculator - ejemplo de uso de next CLI
-FROM golang:1.22-bookworm
+FROM golang:1.22-bookworm AS builder
+
+# Argumentos de build para autenticación con next
+ARG NEXT_PROVIDER=github
+ARG NEXT_TOKEN
+ARG NEXT_ACCOUNT_NAME=gh
+ARG NEXT_OWNERS
+ARG NEXT_URL
 
 # Instalar dependencias necesarias para el keyring (libsecret)
 RUN apt-get update && apt-get install -y \
@@ -20,20 +27,38 @@ RUN chmod +x /usr/local/bin/next
 COPY go.mod go.sum* ./
 COPY *.go ./
 
-# Variables de entorno para configuración
-# Estas se pasan al ejecutar el container
-ENV NEXT_PROVIDER=""
-ENV NEXT_TOKEN=""
-ENV NEXT_ACCOUNT_NAME=""
-ENV NEXT_OWNERS=""
+# Login con next
+RUN echo "🔐 Configurando cuenta '$NEXT_ACCOUNT_NAME'..." && \
+    if [ -n "$NEXT_OWNERS" ]; then \
+        next login --provider "$NEXT_PROVIDER" --url "$NEXT_URL" --token "$NEXT_TOKEN" --name "$NEXT_ACCOUNT_NAME" --owners "$NEXT_OWNERS"; \
+    else \
+        next login --provider "$NEXT_PROVIDER" --url "$NEXT_URL" --token "$NEXT_TOKEN" --name "$NEXT_ACCOUNT_NAME"; \
+    fi
 
-# Copiar script de entrada
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Verificar dependencias privadas
+RUN echo "🔍 Verificando dependencias privadas..." && \
+    next check || true
 
-# Script para configurar next y compilar
-ENTRYPOINT ["/entrypoint.sh"]
+# Descargar dependencias
+RUN echo "📦 Descargando dependencias..." && \
+    go mod tidy
 
-# Comando por defecto: compilar y ejecutar
-CMD ["build"]
+# Compilar
+RUN echo "🔨 Compilando calculator..." && \
+    go build -o calculator . && \
+    echo "✅ Compilación exitosa"
 
+# Etapa final - imagen mínima
+FROM debian:bookworm-slim
+
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copiar solo el binario compilado
+COPY --from=builder /app/calculator /app/calculator
+
+# Ejecutar la calculadora
+CMD ["./calculator"]

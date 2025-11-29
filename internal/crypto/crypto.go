@@ -154,4 +154,3 @@ func IsEncrypted(s string) bool {
 func DeleteKey() error {
 	return keyring.Delete(serviceName, keyName)
 }
-

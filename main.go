@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/rafa/next/cmd/next"
+	"github.com/reitmas32/next/cmd/next"
 )
 
 func main() {

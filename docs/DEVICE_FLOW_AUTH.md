@@ -179,7 +179,7 @@ Ir a: https://github.com/settings/developers
 
 ```
 Application name: next-cli
-Homepage URL: https://github.com/rafa/next
+Homepage URL: https://github.com/reitmas32/next
 Authorization callback URL: http://localhost (no se usa en Device Flow)
 Enable Device Flow: ✅
 ```

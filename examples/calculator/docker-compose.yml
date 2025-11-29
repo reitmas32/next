@@ -2,27 +2,13 @@ version: '3.8'
 
 services:
   calculator:
-    build: .
-    environment:
-      - NEXT_PROVIDER=${NEXT_PROVIDER:-github}
-      - NEXT_TOKEN=${NEXT_TOKEN}
-      - NEXT_ACCOUNT_NAME=${NEXT_ACCOUNT_NAME:-gh}
-      - NEXT_OWNERS=${NEXT_OWNERS:-}
+    build:
+      context: .
+      args:
+        - NEXT_PROVIDER=${NEXT_PROVIDER:-github}
+        - NEXT_URL=${NEXT_URL:-https://github.com}
+        - NEXT_TOKEN=${NEXT_TOKEN}
+        - NEXT_ACCOUNT_NAME=${NEXT_ACCOUNT_NAME:-gh}
+        - NEXT_OWNERS=${NEXT_OWNERS:-}
     stdin_open: true
     tty: true
-    command: run
-
-  # Servicio para desarrollo/debug
-  dev:
-    build: .
-    environment:
-      - NEXT_PROVIDER=${NEXT_PROVIDER:-github}
-      - NEXT_TOKEN=${NEXT_TOKEN}
-      - NEXT_ACCOUNT_NAME=${NEXT_ACCOUNT_NAME:-gh}
-      - NEXT_OWNERS=${NEXT_OWNERS:-}
-    stdin_open: true
-    tty: true
-    command: shell
-    volumes:
-      - .:/app
-

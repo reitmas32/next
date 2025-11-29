@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/fatih/color"
-	"github.com/rafa/next/internal/config"
+	"github.com/reitmas32/next/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -180,4 +180,3 @@ func confirmAction() bool {
 	response = strings.TrimSpace(strings.ToLower(response))
 	return response == "s" || response == "si" || response == "sí" || response == "y" || response == "yes"
 }
-
