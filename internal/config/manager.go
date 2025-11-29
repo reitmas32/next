@@ -118,23 +118,86 @@ func (c *Config) GetAccount(name string) (*Account, error) {
 	return nil, fmt.Errorf("cuenta '%s' no encontrada", name)
 }
 
-// GetAccountByDomain obtiene una cuenta por dominio
+// GetAccountByDomain obtiene una cuenta por dominio (usa la primera que coincida)
+// Para mejor precisión con múltiples cuentas del mismo dominio, usar GetAccountForModule
 func (c *Config) GetAccountByDomain(domain string) (*Account, error) {
-	domain = strings.TrimPrefix(domain, "https://")
-	domain = strings.TrimPrefix(domain, "http://")
-	domain = strings.TrimSuffix(domain, "/")
+	domain = normalizeDomain(domain)
 
-	for _, a := range c.Accounts {
-		accountDomain := strings.TrimPrefix(a.Domain, "https://")
-		accountDomain = strings.TrimPrefix(accountDomain, "http://")
-		accountDomain = strings.TrimSuffix(accountDomain, "/")
-
+	// Buscar primera cuenta que coincida con el dominio
+	for i := range c.Accounts {
+		accountDomain := normalizeDomain(c.Accounts[i].Domain)
 		if accountDomain == domain {
-			return &a, nil
+			return &c.Accounts[i], nil
 		}
 	}
 
 	return nil, fmt.Errorf("no se encontró cuenta para el dominio: %s", domain)
+}
+
+// GetAccountForModule obtiene la cuenta correcta para un módulo Go específico
+// Prioridad: 1) Cuenta con owner específico, 2) Cuenta wildcard (sin owners)
+func (c *Config) GetAccountForModule(module string) (*Account, error) {
+	domain, owner := parseModule(module)
+	domain = normalizeDomain(domain)
+
+	var wildcardAccount *Account
+
+	// Buscar cuenta con owner específico primero
+	for i := range c.Accounts {
+		accountDomain := normalizeDomain(c.Accounts[i].Domain)
+
+		if accountDomain != domain {
+			continue
+		}
+
+		// Si tiene el owner específico, es la cuenta correcta
+		if c.Accounts[i].HasOwner(owner) {
+			return &c.Accounts[i], nil
+		}
+
+		// Guardar cuenta wildcard como fallback
+		if c.Accounts[i].IsWildcard() && wildcardAccount == nil {
+			wildcardAccount = &c.Accounts[i]
+		}
+	}
+
+	// Si encontramos cuenta wildcard, usarla
+	if wildcardAccount != nil {
+		return wildcardAccount, nil
+	}
+
+	return nil, fmt.Errorf("no se encontró cuenta para el módulo: %s", module)
+}
+
+// GetAccountByDomainAndOwner obtiene la cuenta para un dominio y owner específico
+func (c *Config) GetAccountByDomainAndOwner(domain, owner string) (*Account, error) {
+	domain = normalizeDomain(domain)
+
+	var wildcardAccount *Account
+
+	for i := range c.Accounts {
+		accountDomain := normalizeDomain(c.Accounts[i].Domain)
+
+		if accountDomain != domain {
+			continue
+		}
+
+		// Match exacto con owner
+		if c.Accounts[i].HasOwner(owner) {
+			return &c.Accounts[i], nil
+		}
+
+		// Guardar wildcard como fallback
+		if c.Accounts[i].IsWildcard() && wildcardAccount == nil {
+			wildcardAccount = &c.Accounts[i]
+		}
+	}
+
+	if wildcardAccount != nil {
+		return wildcardAccount, nil
+	}
+
+	return nil, fmt.Errorf("no se encontró cuenta para %s/%s", domain, owner)
 }
 
 // RemoveAccount elimina una cuenta por nombre
@@ -151,4 +214,25 @@ func (c *Config) RemoveAccount(name string) error {
 // ListAccounts retorna todas las cuentas configuradas
 func (c *Config) ListAccounts() []Account {
 	return c.Accounts
+}
+
+// normalizeDomain normaliza un dominio eliminando protocolo y trailing slash
+func normalizeDomain(domain string) string {
+	domain = strings.TrimPrefix(domain, "https://")
+	domain = strings.TrimPrefix(domain, "http://")
+	domain = strings.TrimSuffix(domain, "/")
+	return domain
+}
+
+// parseModule extrae el dominio y owner de un módulo Go
+// Ejemplo: "github.com/reitmas32/mathutils" -> "github.com", "reitmas32"
+func parseModule(module string) (domain, owner string) {
+	parts := strings.Split(module, "/")
+	if len(parts) >= 1 {
+		domain = parts[0]
+	}
+	if len(parts) >= 2 {
+		owner = parts[1]
+	}
+	return
 }

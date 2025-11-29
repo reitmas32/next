@@ -20,6 +20,9 @@ var checkCmd = &cobra.Command{
 privadas y configura automáticamente GOPRIVATE y las credenciales 
 necesarias para que 'go mod tidy' funcione correctamente.
 
+Soporta múltiples cuentas del mismo dominio (ej: GitHub personal y trabajo).
+Usa el owner del módulo para seleccionar la cuenta correcta.
+
 Ejemplo:
   next check`,
 	RunE: runCheck,
@@ -67,21 +70,32 @@ func runCheck(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Detectar dependencias privadas (que coincidan con dominios configurados)
+	// Detectar dependencias privadas usando GetAccountForModule
 	var privateDeps []privateDependency
-	var goprivateList []string
+	var goprivatePatterns []string
+	configuredDomains := make(map[string]bool)
 
 	for _, dep := range dependencies {
-		domain := extractDomain(dep)
-		account := findAccountForDomain(cfg, domain)
+		// Usar GetAccountForModule para encontrar la cuenta correcta
+		account, err := cfg.GetAccountForModule(dep)
+		if err != nil {
+			continue // No hay cuenta para este módulo
+		}
 
-		if account != nil {
-			privateDeps = append(privateDeps, privateDependency{
-				Module:  dep,
-				Domain:  domain,
-				Account: account,
-			})
-			goprivateList = append(goprivateList, domain+"/*")
+		domain := extractDomain(dep)
+		owner := extractOwner(dep)
+
+		privateDeps = append(privateDeps, privateDependency{
+			Module:  dep,
+			Domain:  domain,
+			Owner:   owner,
+			Account: account,
+		})
+
+		// Agregar patrón a GOPRIVATE
+		if !configuredDomains[domain] {
+			goprivatePatterns = append(goprivatePatterns, domain+"/*")
+			configuredDomains[domain] = true
 		}
 	}
 
@@ -96,12 +110,16 @@ func runCheck(cmd *cobra.Command, args []string) error {
 
 	for _, dep := range privateDeps {
 		cyan.Printf("  • %s\n", dep.Module)
-		gray.Printf("    cuenta: %s (%s)\n", dep.Account.Name, dep.Account.Provider)
+		if len(dep.Account.Owners) > 0 {
+			gray.Printf("    cuenta: %s (owners: %s)\n", dep.Account.Name, strings.Join(dep.Account.Owners, ", "))
+		} else {
+			gray.Printf("    cuenta: %s (wildcard)\n", dep.Account.Name)
+		}
 	}
 	fmt.Println()
 
 	// Configurar GOPRIVATE
-	goprivateValue := strings.Join(unique(goprivateList), ",")
+	goprivateValue := strings.Join(goprivatePatterns, ",")
 	cyan.Println("⚙️  Configurando GOPRIVATE...")
 
 	if err := setGOPRIVATE(goprivateValue); err != nil {
@@ -110,15 +128,24 @@ func runCheck(cmd *cobra.Command, args []string) error {
 	}
 	green.Printf("✔ GOPRIVATE=%s\n\n", goprivateValue)
 
-	// Configurar credenciales de git para cada dominio
+	// Configurar credenciales de git para cada dependencia
 	cyan.Println("🔐 Configurando credenciales de git...")
 
+	// Agrupar por dominio+cuenta para no configurar múltiples veces
+	configuredCredentials := make(map[string]bool)
+
 	for _, dep := range privateDeps {
+		key := fmt.Sprintf("%s:%s", dep.Domain, dep.Account.Name)
+		if configuredCredentials[key] {
+			continue
+		}
+
 		if err := configureGitCredentials(dep.Domain, dep.Account); err != nil {
 			color.Yellow("! Advertencia al configurar %s: %v", dep.Domain, err)
 		} else {
-			green.Printf("✔ Credenciales configuradas para %s\n", dep.Domain)
+			green.Printf("✔ Credenciales configuradas para %s (cuenta: %s)\n", dep.Domain, dep.Account.Name)
 		}
+		configuredCredentials[key] = true
 	}
 
 	fmt.Println()
@@ -135,6 +162,7 @@ func runCheck(cmd *cobra.Command, args []string) error {
 type privateDependency struct {
 	Module  string
 	Domain  string
+	Owner   string
 	Account *config.Account
 }
 
@@ -195,37 +223,13 @@ func extractDomain(module string) string {
 	return module
 }
 
-// findAccountForDomain busca una cuenta configurada que coincida con el dominio
-func findAccountForDomain(cfg *config.Config, domain string) *config.Account {
-	// Mapeo de dominios conocidos
-	domainMap := map[string]string{
-		"github.com": "github.com",
-		"gitlab.com": "gitlab.com",
+// extractOwner extrae el owner de un módulo Go
+func extractOwner(module string) string {
+	parts := strings.Split(module, "/")
+	if len(parts) > 1 {
+		return parts[1]
 	}
-
-	for _, account := range cfg.Accounts {
-		accountDomain := strings.TrimPrefix(account.Domain, "https://")
-		accountDomain = strings.TrimPrefix(accountDomain, "http://")
-		accountDomain = strings.TrimSuffix(accountDomain, "/")
-
-		// Coincidencia directa
-		if accountDomain == domain {
-			return &account
-		}
-
-		// Coincidencia con dominio mapeado
-		if mapped, ok := domainMap[domain]; ok && accountDomain == mapped {
-			return &account
-		}
-
-		// Para github.com y gitlab.com públicos
-		if (domain == "github.com" && account.Provider == "github") ||
-			(domain == "gitlab.com" && account.Provider == "gitlab") {
-			return &account
-		}
-	}
-
-	return nil
+	return ""
 }
 
 // setGOPRIVATE configura la variable GOPRIVATE
@@ -295,17 +299,3 @@ func configureNetrc(domain string, account *config.Account) error {
 	_, err = f.WriteString(entry)
 	return err
 }
-
-// unique elimina duplicados de un slice
-func unique(slice []string) []string {
-	seen := make(map[string]bool)
-	var result []string
-	for _, s := range slice {
-		if !seen[s] {
-			seen[s] = true
-			result = append(result, s)
-		}
-	}
-	return result
-}
-

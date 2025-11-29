@@ -3,6 +3,7 @@ package next
 import (
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/rafa/next/internal/api"
@@ -28,6 +29,8 @@ Validaciones:
   - No deben existir cambios sin commit (usar -f para forzar)
   - El tag debe seguir el formato vX.Y.Z
   - Si hay commits pendientes de push, los sube automáticamente
+
+Soporta múltiples cuentas del mismo dominio (usa el owner del repo para seleccionar).
 
 Ejemplo:
   next create-version v1.4.0`,
@@ -89,6 +92,9 @@ func runCreateVersion(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Extraer owner del repoPath (ej: "reitmas32/mathutils" -> "reitmas32")
+	owner := extractOwnerFromRepoPath(repoPath)
+
 	// Cargar configuración y buscar cuenta
 	cfg, err := config.Load()
 	if err != nil {
@@ -96,10 +102,12 @@ func runCreateVersion(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	account, err := cfg.GetAccountByDomain(domain)
+	// Buscar cuenta usando dominio y owner
+	account, err := cfg.GetAccountByDomainAndOwner(domain, owner)
 	if err != nil {
-		color.Red("✗ No se encontró cuenta para el dominio: %s", domain)
+		color.Red("✗ No se encontró cuenta para %s/%s", domain, owner)
 		color.Yellow("  Use 'next login' para agregar una cuenta")
+		color.Yellow("  Tip: use --owners %s para asociar la cuenta con este owner", owner)
 		return err
 	}
 
@@ -166,6 +174,7 @@ func runCreateVersion(cmd *cobra.Command, args []string) error {
 	green.Printf("✔ Versión %s creada exitosamente\n", tag)
 	cyan.Printf("  Repositorio: %s\n", repoPath)
 	cyan.Printf("  Rama: %s\n", status.Branch)
+	cyan.Printf("  Cuenta: %s\n", account.Name)
 	fmt.Println()
 
 	// Mostrar cómo instalar
@@ -181,4 +190,14 @@ func isValidSemver(tag string) bool {
 	pattern := `^v\d+\.\d+\.\d+$`
 	matched, _ := regexp.MatchString(pattern, tag)
 	return matched
+}
+
+// extractOwnerFromRepoPath extrae el owner de un repoPath
+// Ejemplo: "reitmas32/mathutils" -> "reitmas32"
+func extractOwnerFromRepoPath(repoPath string) string {
+	parts := strings.Split(repoPath, "/")
+	if len(parts) > 0 {
+		return parts[0]
+	}
+	return ""
 }

@@ -2,6 +2,7 @@ package next
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/rafa/next/internal/api"
@@ -14,6 +15,7 @@ var (
 	loginURL      string
 	loginToken    string
 	loginName     string
+	loginOwners   string
 )
 
 var loginCmd = &cobra.Command{
@@ -22,8 +24,18 @@ var loginCmd = &cobra.Command{
 	Long: `Permite autenticar un dominio y guardarlo como una cuenta.
 Soporta múltiples dominios registrados simultáneamente.
 
-Ejemplo:
-  next login --provider gitlab --url https://gitlab.example.com --token <PAT> --name company`,
+Para manejar múltiples cuentas del mismo dominio (ej: GitHub personal y trabajo),
+usa --owners para especificar qué usuarios/organizaciones maneja cada cuenta.
+
+Ejemplos:
+  # Cuenta básica (acepta todos los repos del dominio)
+  next login --provider github --url https://github.com --token <PAT> --name personal
+
+  # Cuenta con owners específicos (solo para repos de esos usuarios/orgs)
+  next login --provider github --url https://github.com --token <PAT> --name trabajo --owners mi-empresa,empresa-tools
+
+  # GitLab con owners
+  next login --provider gitlab --url https://gitlab.com --token <PAT> --name gitlab-work --owners company-group`,
 	RunE: runLogin,
 }
 
@@ -32,6 +44,7 @@ func init() {
 	loginCmd.Flags().StringVarP(&loginURL, "url", "u", "", "URL del dominio o API endpoint (requerido)")
 	loginCmd.Flags().StringVarP(&loginToken, "token", "t", "", "Token de acceso (PAT o Deploy Token) (requerido)")
 	loginCmd.Flags().StringVarP(&loginName, "name", "n", "", "Nombre/alias de la cuenta (opcional)")
+	loginCmd.Flags().StringVarP(&loginOwners, "owners", "o", "", "Usuarios/organizaciones que maneja esta cuenta, separados por coma (opcional)")
 
 	loginCmd.MarkFlagRequired("provider")
 	loginCmd.MarkFlagRequired("url")
@@ -64,6 +77,17 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		accountName = fmt.Sprintf("%s-%s", loginProvider, user)
 	}
 
+	// Parsear owners
+	var owners []string
+	if loginOwners != "" {
+		for _, o := range strings.Split(loginOwners, ",") {
+			o = strings.TrimSpace(o)
+			if o != "" {
+				owners = append(owners, o)
+			}
+		}
+	}
+
 	// Crear cuenta
 	account := config.Account{
 		Name:     accountName,
@@ -71,6 +95,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		APIURL:   provider.GetAPIURL(),
 		Domain:   loginURL,
 		Token:    loginToken,
+		Owners:   owners,
 	}
 
 	// Guardar en configuración
@@ -91,6 +116,12 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	color.Green("✔ Cuenta '%s' agregada correctamente", accountName)
 	color.Magenta("Proveedor: %s", loginProvider)
 	color.White("Dominio:   %s", loginURL)
+
+	if len(owners) > 0 {
+		color.Cyan("Owners:    %s", strings.Join(owners, ", "))
+	} else {
+		color.White("Owners:    * (todos)")
+	}
 
 	return nil
 }
