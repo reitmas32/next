@@ -76,4 +76,3 @@ func runVersions(cmd *cobra.Command, args []string) error {
 
 	return nil
 }
-

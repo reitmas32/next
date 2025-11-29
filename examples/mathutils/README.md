@@ -5,7 +5,7 @@ Biblioteca de utilidades matemáticas simples para Go.
 ## Instalación
 
 ```bash
-go get github.com/rafa/mathutils@v1.0.0
+go get github.com/reitmas32/mathutils@v1.0.0
 ```
 
 ## Uso
@@ -15,7 +15,7 @@ package main
 
 import (
     "fmt"
-    "github.com/rafa/mathutils"
+    "github.com/reitmas32/mathutils"
 )
 
 func main() {

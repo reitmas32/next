@@ -74,4 +74,3 @@ func PrintHeader(text string) {
 	Bold.Println(text)
 	fmt.Println()
 }
-

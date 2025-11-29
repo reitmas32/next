@@ -20,4 +20,3 @@ func NewConfig() *Config {
 		Accounts: []Account{},
 	}
 }
-

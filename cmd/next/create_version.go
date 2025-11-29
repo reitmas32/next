@@ -122,4 +122,3 @@ func isValidSemver(tag string) bool {
 	matched, _ := regexp.MatchString(pattern, tag)
 	return matched
 }
-

@@ -1,4 +1,4 @@
-module github.com/rafa/mathutils
+module github.com/reitmas32/mathutils
 
 go 1.22
 

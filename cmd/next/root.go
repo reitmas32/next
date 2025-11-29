@@ -29,4 +29,3 @@ func init() {
 	rootCmd.AddCommand(createVersionCmd)
 	rootCmd.AddCommand(versionsCmd)
 }
-

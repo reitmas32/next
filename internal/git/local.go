@@ -60,4 +60,3 @@ func GetCurrentCommit() (string, error) {
 
 	return strings.TrimSpace(string(output)), nil
 }
-

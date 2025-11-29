@@ -134,3 +134,7 @@ func Clamp(value, min, max float64) float64 {
 	return value
 }
 
+// Subtract subtracts b from a.
+func Subtract(a, b float64) float64 {
+	return a - b
+}

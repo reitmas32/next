@@ -65,4 +65,3 @@ func NormalizeRepoPath(path string) string {
 	path = strings.TrimPrefix(path, "/")
 	return path
 }
-

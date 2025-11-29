@@ -152,4 +152,3 @@ func (c *Config) RemoveAccount(name string) error {
 func (c *Config) ListAccounts() []Account {
 	return c.Accounts
 }
-
