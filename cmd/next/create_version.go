@@ -11,7 +11,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var forceVersion bool
+var (
+	forceVersion bool
+	skipPush     bool
+)
 
 var createVersionCmd = &cobra.Command{
 	Use:   "create-version <tag>",
@@ -24,6 +27,7 @@ Validaciones:
   - El directorio actual debe ser un repositorio Git válido
   - No deben existir cambios sin commit (usar -f para forzar)
   - El tag debe seguir el formato vX.Y.Z
+  - Si hay commits pendientes de push, los sube automáticamente
 
 Ejemplo:
   next create-version v1.4.0`,
@@ -33,10 +37,15 @@ Ejemplo:
 
 func init() {
 	createVersionCmd.Flags().BoolVarP(&forceVersion, "force", "f", false, "Forzar creación aunque haya cambios sin commit")
+	createVersionCmd.Flags().BoolVar(&skipPush, "skip-push", false, "No hacer push automático de commits pendientes")
 }
 
 func runCreateVersion(cmd *cobra.Command, args []string) error {
 	tag := args[0]
+
+	cyan := color.New(color.FgCyan)
+	green := color.New(color.FgGreen)
+	yellow := color.New(color.FgYellow)
 
 	// Validar formato semver
 	if !isValidSemver(tag) {
@@ -46,7 +55,7 @@ func runCreateVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// Verificar que estamos en un repo git
-	repoRoot, err := git.GetRepoRoot()
+	_, err := git.GetRepoRoot()
 	if err != nil {
 		color.Red("✗ No se encuentra en un repositorio Git")
 		return err
@@ -61,7 +70,7 @@ func runCreateVersion(cmd *cobra.Command, args []string) error {
 		}
 		if hasChanges {
 			color.Red("✗ Existen cambios sin commit")
-			color.Yellow("  Use -f para forzar la creación del tag")
+			yellow.Println("  Haga commit de sus cambios o use -f para forzar")
 			return fmt.Errorf("cambios sin commit")
 		}
 	}
@@ -94,6 +103,49 @@ func runCreateVersion(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Verificar estado de sincronización con el remote
+	cyan.Println("🔍 Verificando sincronización con origin...")
+
+	status, err := git.GetBranchStatus("origin")
+	if err != nil {
+		color.Red("✗ Error al verificar estado de la rama: %v", err)
+		return err
+	}
+
+	// Si hay commits detrás, advertir
+	if status.NeedsPull {
+		yellow.Printf("! La rama '%s' está %d commit(s) detrás de origin\n", status.Branch, status.Behind)
+		yellow.Println("  Considere hacer 'git pull' antes de crear la versión")
+		if !forceVersion {
+			return fmt.Errorf("rama desactualizada")
+		}
+		yellow.Println("  Continuando por -f (force)...")
+	}
+
+	// Si hay commits pendientes de push, subirlos
+	if status.NeedsPush && !skipPush {
+		if status.IsNew {
+			cyan.Printf("📤 La rama '%s' es nueva, subiendo al remote...\n", status.Branch)
+		} else {
+			cyan.Printf("📤 Subiendo %d commit(s) pendiente(s) a origin/%s...\n", status.Ahead, status.Branch)
+		}
+
+		var pushErr error
+		if status.IsNew {
+			pushErr = git.PushBranchSetUpstream("origin", status.Branch)
+		} else {
+			pushErr = git.PushBranch("origin", status.Branch)
+		}
+
+		if pushErr != nil {
+			color.Red("✗ Error al hacer push: %v", pushErr)
+			return pushErr
+		}
+		green.Printf("✔ Código subido exitosamente\n")
+	} else if status.IsSynced {
+		green.Printf("✔ Rama '%s' sincronizada con origin\n", status.Branch)
+	}
+
 	// Crear cliente del proveedor
 	apiProvider, err := api.NewProvider(provider, account.Domain, account.Token)
 	if err != nil {
@@ -102,16 +154,24 @@ func runCreateVersion(cmd *cobra.Command, args []string) error {
 	}
 
 	// Crear tag en el remote
+	cyan.Printf("🏷️  Creando tag %s...\n", tag)
+
 	if err := apiProvider.CreateTag(repoPath, tag); err != nil {
 		color.Red("✗ Error al crear tag: %v", err)
 		return err
 	}
 
 	// Mostrar éxito
-	color.Green("✔ Versión %s creada exitosamente", tag)
-	color.Cyan("Repositorio: %s", repoPath)
+	fmt.Println()
+	green.Printf("✔ Versión %s creada exitosamente\n", tag)
+	cyan.Printf("  Repositorio: %s\n", repoPath)
+	cyan.Printf("  Rama: %s\n", status.Branch)
+	fmt.Println()
 
-	_ = repoRoot // Usamos la variable para evitar warning
+	// Mostrar cómo instalar
+	color.White("Para instalar esta versión:")
+	cyan.Printf("  go get %s/%s@%s\n", domain, repoPath, tag)
+	fmt.Println()
 
 	return nil
 }
