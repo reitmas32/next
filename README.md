@@ -23,14 +23,17 @@ go build -o next .
 Autenticar con un dominio GitLab o GitHub.
 
 ```bash
-# GitHub
-next login --provider github --url https://github.com --token <TOKEN> --name gh
+# Cuenta básica (acepta todos los repos del dominio)
+next login --provider github --url https://github.com --token <TOKEN> --name personal
+
+# Cuenta con owners específicos (solo para repos de esos usuarios/orgs)
+next login --provider github --url https://github.com --token <TOKEN> --name trabajo --owners mi-empresa,empresa-tools
 
 # GitLab
 next login --provider gitlab --url https://gitlab.example.com --token <TOKEN> --name company
 
-# GitLab público
-next login --provider gitlab --url https://gitlab.com --token <TOKEN> --name gitlab
+# GitLab con owners
+next login --provider gitlab --url https://gitlab.com --token <TOKEN> --name gitlab-work --owners my-group
 ```
 
 **Flags:**
@@ -38,6 +41,43 @@ next login --provider gitlab --url https://gitlab.com --token <TOKEN> --name git
 - `-u, --url` - URL del dominio (requerido)
 - `-t, --token` - Token de acceso PAT (requerido)
 - `-n, --name` - Alias de la cuenta (opcional)
+- `-o, --owners` - Usuarios/organizaciones que maneja esta cuenta (opcional)
+
+---
+
+### Múltiples cuentas del mismo dominio
+
+Puedes tener varias cuentas de GitHub (o GitLab) con diferentes tokens. Usa `--owners` para especificar qué usuarios/organizaciones maneja cada cuenta:
+
+```bash
+# Cuenta personal (solo repos de reitmas32)
+next login --provider github --url https://github.com \
+    --token ghp_personal_xxx \
+    --name personal \
+    --owners reitmas32
+
+# Cuenta de trabajo (repos de la empresa)
+next login --provider github --url https://github.com \
+    --token ghp_empresa_xxx \
+    --name trabajo \
+    --owners mi-empresa,empresa-tools
+
+# Cuenta fallback (sin owners = acepta cualquier otro repo)
+next login --provider github --url https://github.com \
+    --token ghp_otro_xxx \
+    --name github-otros
+```
+
+**Lógica de selección:**
+
+| Módulo | Cuenta usada |
+|--------|--------------|
+| `github.com/reitmas32/mathutils` | `personal` ✓ |
+| `github.com/mi-empresa/core-lib` | `trabajo` ✓ |
+| `github.com/empresa-tools/utils` | `trabajo` ✓ |
+| `github.com/otro-user/lib` | `github-otros` (fallback) |
+
+**Prioridad:** Cuentas con `owners` > Cuentas sin `owners` (wildcard)
 
 ---
 
@@ -47,16 +87,16 @@ Lista todas las librerías Go disponibles en una cuenta.
 
 ```bash
 # Listar todas las librerías
-next list --account gh
+next list --account personal
 
 # Solo públicas
-next list --account gh --visibility public
+next list --account personal --visibility public
 
 # Solo privadas
-next list --account gh --visibility private
+next list --account trabajo --visibility private
 
 # De una organización específica
-next list --account gh --owner myorg
+next list --account trabajo --owner mi-empresa
 ```
 
 **Flags:**
@@ -83,7 +123,7 @@ dominio: https://github.com
 Lista todas las versiones (tags) de una librería.
 
 ```bash
-next versions reitmas32/mathutils --account gh
+next versions reitmas32/mathutils --account personal
 ```
 
 **Flags:**
@@ -110,7 +150,7 @@ next create-version v1.2.0
 **Características:**
 - ✅ Valida formato semántico (`vX.Y.Z`)
 - ✅ Verifica que no haya cambios sin commit
-- ✅ Detecta automáticamente el remote y la cuenta
+- ✅ Detecta automáticamente el remote y la cuenta correcta (por owner)
 - ✅ **Auto-push**: Si hay commits pendientes, los sube automáticamente
 - ✅ Crea el tag vía API (GitHub/GitLab)
 
@@ -138,6 +178,7 @@ next create-version v1.2.0
 ✔ Versión v1.2.0 creada exitosamente
   Repositorio: reitmas32/mathutils
   Rama: main
+  Cuenta: personal
 
 Para instalar esta versión:
   go get github.com/reitmas32/mathutils@v1.2.0
@@ -156,6 +197,7 @@ next check
 
 **Características:**
 - ✅ Analiza `go.mod` y detecta dependencias privadas
+- ✅ Selecciona la cuenta correcta para cada dependencia (por owner)
 - ✅ Configura automáticamente `GOPRIVATE`
 - ✅ Configura credenciales de git para repos privados
 - ✅ Después de ejecutar, `go mod tidy` funciona correctamente
@@ -166,16 +208,19 @@ next check
 
 Dependencias encontradas: 3
 
-📦 Dependencias privadas detectadas: 1
+📦 Dependencias privadas detectadas: 2
 
   • github.com/reitmas32/mathutils
-    cuenta: gh (github)
+    cuenta: personal (owners: reitmas32)
+  • github.com/mi-empresa/core-lib
+    cuenta: trabajo (owners: mi-empresa, empresa-tools)
 
 ⚙️  Configurando GOPRIVATE...
 ✔ GOPRIVATE=github.com/*
 
 🔐 Configurando credenciales de git...
-✔ Credenciales configuradas para github.com
+✔ Credenciales configuradas para github.com (cuenta: personal)
+✔ Credenciales configuradas para github.com (cuenta: trabajo)
 
 ✔ Configuración completada
 
@@ -188,10 +233,16 @@ Ahora puedes ejecutar:
 
 ## Flujo de trabajo típico
 
-### 1. Configurar cuenta
+### 1. Configurar cuentas
 
 ```bash
-next login --provider github --url https://github.com --token ghp_xxx --name gh
+# Cuenta personal
+next login --provider github --url https://github.com \
+    --token ghp_personal_xxx --name personal --owners mi-usuario
+
+# Cuenta de trabajo (opcional)
+next login --provider github --url https://github.com \
+    --token ghp_trabajo_xxx --name trabajo --owners mi-empresa
 ```
 
 ### 2. Crear una librería
@@ -199,14 +250,14 @@ next login --provider github --url https://github.com --token ghp_xxx --name gh
 ```bash
 mkdir mi-libreria
 cd mi-libreria
-go mod init github.com/usuario/mi-libreria
+go mod init github.com/mi-usuario/mi-libreria
 
 # Escribir código...
 
 git init
 git add -A
 git commit -m "Initial commit"
-git remote add origin git@github.com:usuario/mi-libreria.git
+git remote add origin git@github.com:mi-usuario/mi-libreria.git
 ```
 
 ### 3. Publicar versión
@@ -224,7 +275,7 @@ cd otro-proyecto
 next check
 
 # Instalar
-go get github.com/usuario/mi-libreria@v1.0.0
+go get github.com/mi-usuario/mi-libreria@v1.0.0
 ```
 
 ### 5. Actualizar versión
@@ -250,14 +301,23 @@ La configuración se guarda en `~/.next/config.json`:
 {
   "accounts": [
     {
-      "name": "gh",
+      "name": "personal",
       "provider": "github",
       "api_url": "https://api.github.com",
       "domain": "https://github.com",
-      "token": "ghp_xxxxxxxxxxxx"
+      "token": "ghp_xxxxxxxxxxxx",
+      "owners": ["reitmas32"]
     },
     {
-      "name": "company",
+      "name": "trabajo",
+      "provider": "github",
+      "api_url": "https://api.github.com",
+      "domain": "https://github.com",
+      "token": "ghp_yyyyyyyyyyyy",
+      "owners": ["mi-empresa", "empresa-tools"]
+    },
+    {
+      "name": "company-gitlab",
       "provider": "gitlab",
       "api_url": "https://gitlab.company.com/api/v4",
       "domain": "https://gitlab.company.com",
@@ -290,4 +350,3 @@ La configuración se guarda en `~/.next/config.json`:
 ## Licencia
 
 MIT
-
