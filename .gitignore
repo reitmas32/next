@@ -5,6 +5,9 @@
 *.so
 *.dylib
 /next
+/next-linux
+examples/calculator/next
+examples/calculator/calculator
 
 # Build output
 /bin/

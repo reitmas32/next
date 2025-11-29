@@ -1,0 +1,9 @@
+# Ignorar archivos innecesarios
+.env
+*.exe
+calculator
+!next
+.git
+.gitignore
+README.md
+

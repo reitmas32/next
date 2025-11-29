@@ -13,4 +13,7 @@ func main() {
 
 	subtract := mathutils.Subtract(10, 2)
 	fmt.Println(subtract)
+
+	logarithm := mathutils.Logarithm(10, 2)
+	fmt.Println(logarithm)
 }

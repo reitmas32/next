@@ -138,3 +138,7 @@ func Clamp(value, min, max float64) float64 {
 func Subtract(a, b float64) float64 {
 	return a - b
 }
+
+func Logarithm(base, x float64) float64 {
+	return math.Log(x) / math.Log(base)
+}
