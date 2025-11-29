@@ -158,14 +158,14 @@ func HasRemoteBranch(remote, branch string) bool {
 
 // BranchStatus representa el estado de sincronización de una rama
 type BranchStatus struct {
-	Branch       string
-	Remote       string
-	Ahead        int
-	Behind       int
-	IsNew        bool // true si la rama no existe en el remote
-	NeedsPush    bool
-	NeedsPull    bool
-	IsSynced     bool
+	Branch    string
+	Remote    string
+	Ahead     int
+	Behind    int
+	IsNew     bool // true si la rama no existe en el remote
+	NeedsPush bool
+	NeedsPull bool
+	IsSynced  bool
 }
 
 // GetBranchStatus obtiene el estado completo de sincronización
