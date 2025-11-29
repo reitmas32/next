@@ -9,7 +9,11 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var listAccount string
+var (
+	listAccount    string
+	listVisibility string
+	listOwner      string
+)
 
 var listCmd = &cobra.Command{
 	Use:   "list",
@@ -17,13 +21,19 @@ var listCmd = &cobra.Command{
 	Long: `Lista todas las librerías Go disponibles en una cuenta.
 Solo muestra repositorios que contengan un archivo go.mod.
 
+Soporta tanto repositorios públicos como privados.
+
 Ejemplo:
-  next list --account gitlab-main`,
+  next list --account gitlab-main
+  next list --visibility public
+  next list --owner myorg --visibility private`,
 	RunE: runList,
 }
 
 func init() {
 	listCmd.Flags().StringVarP(&listAccount, "account", "a", "", "Nombre de la cuenta a usar")
+	listCmd.Flags().StringVarP(&listVisibility, "visibility", "v", "all", "Filtrar por visibilidad: all, public, private")
+	listCmd.Flags().StringVarP(&listOwner, "owner", "o", "", "Filtrar por usuario/organización específico")
 }
 
 func runList(cmd *cobra.Command, args []string) error {
@@ -48,8 +58,22 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Configurar opciones de listado
+	opts := api.ListOptions{
+		Owner: listOwner,
+	}
+
+	switch listVisibility {
+	case "public":
+		opts.Visibility = api.VisibilityPublic
+	case "private":
+		opts.Visibility = api.VisibilityPrivate
+	default:
+		opts.Visibility = api.VisibilityAll
+	}
+
 	// Obtener librerías Go
-	libraries, err := provider.ListGoLibraries()
+	libraries, err := provider.ListGoLibrariesWithOptions(opts)
 	if err != nil {
 		color.Red("✗ Error al listar librerías: %v", err)
 		return err
@@ -64,10 +88,21 @@ func runList(cmd *cobra.Command, args []string) error {
 	cyan := color.New(color.FgCyan)
 	magenta := color.New(color.FgMagenta)
 	gray := color.New(color.FgWhite)
+	green := color.New(color.FgGreen)
+	yellow := color.New(color.FgYellow)
 
 	fmt.Println()
 	for _, lib := range libraries {
-		cyan.Println(lib.Name)
+		cyan.Printf("%-30s", lib.Name)
+
+		// Mostrar badge de visibilidad
+		if lib.Visibility == "public" {
+			green.Printf(" [público]")
+		} else {
+			yellow.Printf(" [privado]")
+		}
+		fmt.Println()
+
 		if lib.Description != "" {
 			gray.Printf("  %s\n", lib.Description)
 		}
@@ -77,6 +112,9 @@ func runList(cmd *cobra.Command, args []string) error {
 	magenta.Printf("proveedor: %s\n", account.Provider)
 	gray.Printf("dominio: %s\n", account.Domain)
 
+	if listVisibility != "all" {
+		gray.Printf("filtro: %s\n", listVisibility)
+	}
+
 	return nil
 }
-

@@ -69,16 +69,45 @@ func (g *GitLabProvider) ValidateToken() (string, error) {
 	return user.Username, nil
 }
 
-// ListGoLibraries lista todas las librerías Go del usuario
+// ListGoLibraries lista todas las librerías Go del usuario (público y privado)
 func (g *GitLabProvider) ListGoLibraries() ([]Library, error) {
+	return g.ListGoLibrariesWithOptions(ListOptions{Visibility: VisibilityAll})
+}
+
+// ListGoLibrariesWithOptions lista librerías con opciones de filtrado
+func (g *GitLabProvider) ListGoLibrariesWithOptions(opts ListOptions) ([]Library, error) {
 	var libraries []Library
 	page := 1
 	perPage := 100
 
 	for {
-		url := fmt.Sprintf("%s/projects?membership=true&per_page=%d&page=%d", g.apiURL, perPage, page)
+		// Construir URL con parámetros
+		apiURL := fmt.Sprintf("%s/projects?per_page=%d&page=%d", g.apiURL, perPage, page)
 
-		req, err := http.NewRequest("GET", url, nil)
+		// Filtrar por visibilidad
+		switch opts.Visibility {
+		case VisibilityPublic:
+			apiURL += "&visibility=public"
+		case VisibilityPrivate:
+			apiURL += "&visibility=private"
+		}
+
+		// Si hay owner, buscar por grupo/usuario específico
+		if opts.Owner != "" {
+			// Buscar proyectos de un grupo o usuario específico
+			encodedOwner := url.PathEscape(opts.Owner)
+			apiURL = fmt.Sprintf("%s/groups/%s/projects?per_page=%d&page=%d", g.apiURL, encodedOwner, perPage, page)
+			if opts.Visibility == VisibilityPublic {
+				apiURL += "&visibility=public"
+			} else if opts.Visibility == VisibilityPrivate {
+				apiURL += "&visibility=private"
+			}
+		} else {
+			// Para proyectos propios, incluir membership
+			apiURL += "&membership=true"
+		}
+
+		req, err := http.NewRequest("GET", apiURL, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -96,6 +125,7 @@ func (g *GitLabProvider) ListGoLibraries() ([]Library, error) {
 			Description string `json:"description"`
 			WebURL      string `json:"web_url"`
 			PathWithNS  string `json:"path_with_namespace"`
+			Visibility  string `json:"visibility"` // "public", "internal", "private"
 		}
 
 		body, _ := io.ReadAll(resp.Body)
@@ -112,11 +142,17 @@ func (g *GitLabProvider) ListGoLibraries() ([]Library, error) {
 		for _, p := range projects {
 			// Verificar si tiene go.mod
 			if g.hasGoMod(p.ID) {
+				visibility := p.Visibility
+				if visibility == "internal" {
+					visibility = "private"
+				}
+
 				libraries = append(libraries, Library{
 					Name:        p.Name,
 					Description: p.Description,
 					URL:         p.WebURL,
 					Provider:    "gitlab",
+					Visibility:  visibility,
 				})
 			}
 		}
@@ -282,4 +318,3 @@ func (g *GitLabProvider) getDefaultBranchRef(repoPath string) (string, error) {
 
 	return project.DefaultBranch, nil
 }
-

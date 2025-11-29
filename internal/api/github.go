@@ -76,16 +76,46 @@ func (g *GitHubProvider) ValidateToken() (string, error) {
 	return user.Login, nil
 }
 
-// ListGoLibraries lista todas las librerías Go del usuario
+// ListGoLibraries lista todas las librerías Go del usuario (público y privado)
 func (g *GitHubProvider) ListGoLibraries() ([]Library, error) {
+	return g.ListGoLibrariesWithOptions(ListOptions{Visibility: VisibilityAll})
+}
+
+// ListGoLibrariesWithOptions lista librerías con opciones de filtrado
+func (g *GitHubProvider) ListGoLibrariesWithOptions(opts ListOptions) ([]Library, error) {
 	var libraries []Library
 	page := 1
 	perPage := 100
 
 	for {
-		url := fmt.Sprintf("%s/user/repos?per_page=%d&page=%d", g.apiURL, perPage, page)
+		var apiURL string
 
-		req, err := http.NewRequest("GET", url, nil)
+		// Si hay owner, buscar repos de ese usuario/organización
+		if opts.Owner != "" {
+			// Primero intentar como organización
+			apiURL = fmt.Sprintf("%s/orgs/%s/repos?per_page=%d&page=%d", g.apiURL, opts.Owner, perPage, page)
+
+			// Agregar filtro de visibilidad
+			switch opts.Visibility {
+			case VisibilityPublic:
+				apiURL += "&type=public"
+			case VisibilityPrivate:
+				apiURL += "&type=private"
+			}
+		} else {
+			// Repos del usuario autenticado
+			apiURL = fmt.Sprintf("%s/user/repos?per_page=%d&page=%d", g.apiURL, perPage, page)
+
+			// Agregar filtro de visibilidad
+			switch opts.Visibility {
+			case VisibilityPublic:
+				apiURL += "&visibility=public"
+			case VisibilityPrivate:
+				apiURL += "&visibility=private"
+			}
+		}
+
+		req, err := http.NewRequest("GET", apiURL, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -98,11 +128,37 @@ func (g *GitHubProvider) ListGoLibraries() ([]Library, error) {
 			return nil, fmt.Errorf("error de conexión: %w", err)
 		}
 
+		// Si falla como org y hay owner, intentar como usuario
+		if resp.StatusCode == http.StatusNotFound && opts.Owner != "" {
+			resp.Body.Close()
+			apiURL = fmt.Sprintf("%s/users/%s/repos?per_page=%d&page=%d", g.apiURL, opts.Owner, perPage, page)
+			switch opts.Visibility {
+			case VisibilityPublic:
+				apiURL += "&type=public"
+			case VisibilityPrivate:
+				apiURL += "&type=private"
+			}
+
+			req, err = http.NewRequest("GET", apiURL, nil)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Header.Set("Authorization", "Bearer "+g.token)
+			req.Header.Set("Accept", "application/vnd.github+json")
+
+			resp, err = g.client.Do(req)
+			if err != nil {
+				return nil, fmt.Errorf("error de conexión: %w", err)
+			}
+		}
+
 		var repos []struct {
 			Name        string `json:"name"`
 			FullName    string `json:"full_name"`
 			Description string `json:"description"`
 			HTMLURL     string `json:"html_url"`
+			Private     bool   `json:"private"`
 		}
 
 		body, _ := io.ReadAll(resp.Body)
@@ -119,11 +175,17 @@ func (g *GitHubProvider) ListGoLibraries() ([]Library, error) {
 		for _, r := range repos {
 			// Verificar si tiene go.mod
 			if g.hasGoMod(r.FullName) {
+				visibility := "public"
+				if r.Private {
+					visibility = "private"
+				}
+
 				libraries = append(libraries, Library{
 					Name:        r.Name,
 					Description: r.Description,
 					URL:         r.HTMLURL,
 					Provider:    "github",
+					Visibility:  visibility,
 				})
 			}
 		}
@@ -334,4 +396,3 @@ func (g *GitHubProvider) getDefaultBranchSHA(repoPath string) (string, error) {
 
 	return branch.Commit.SHA, nil
 }
-

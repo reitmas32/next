@@ -4,18 +4,38 @@ import (
 	"fmt"
 )
 
+// Visibility define el tipo de visibilidad de los repositorios
+type Visibility string
+
+const (
+	// VisibilityAll lista todos los repos (públicos y privados)
+	VisibilityAll Visibility = "all"
+	// VisibilityPublic lista solo repos públicos
+	VisibilityPublic Visibility = "public"
+	// VisibilityPrivate lista solo repos privados
+	VisibilityPrivate Visibility = "private"
+)
+
 // Library representa una librería Go
 type Library struct {
 	Name        string
 	Description string
 	URL         string
 	Provider    string
+	Visibility  string // "public" o "private"
 }
 
 // Version representa una versión/tag de una librería
 type Version struct {
 	Name string
 	Date string
+}
+
+// ListOptions opciones para listar librerías
+type ListOptions struct {
+	Visibility Visibility
+	// Owner permite filtrar por usuario/organización (opcional)
+	Owner string
 }
 
 // Provider define la interfaz para interactuar con proveedores Git
@@ -28,6 +48,9 @@ type Provider interface {
 
 	// ListGoLibraries lista todas las librerías Go del usuario
 	ListGoLibraries() ([]Library, error)
+
+	// ListGoLibrariesWithOptions lista librerías con opciones de filtrado
+	ListGoLibrariesWithOptions(opts ListOptions) ([]Library, error)
 
 	// ListVersions lista todas las versiones de una librería
 	ListVersions(library string) ([]Version, error)
@@ -47,4 +70,3 @@ func NewProvider(providerType, baseURL, token string) (Provider, error) {
 		return nil, fmt.Errorf("proveedor no soportado: %s", providerType)
 	}
 }
-
