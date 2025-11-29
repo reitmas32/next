@@ -7,12 +7,17 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/rafa/next/internal/crypto"
 )
 
 var (
 	configDir  = ".next"
 	configFile = "config.json"
 	mu         sync.Mutex
+
+	// Cache de la llave de encriptación
+	encryptionKey []byte
 )
 
 // getConfigPath retorna la ruta completa del archivo de configuración
@@ -23,6 +28,21 @@ func getConfigPath() (string, error) {
 	}
 
 	return filepath.Join(homeDir, configDir, configFile), nil
+}
+
+// getEncryptionKey obtiene o crea la llave de encriptación
+func getEncryptionKey() ([]byte, error) {
+	if encryptionKey != nil {
+		return encryptionKey, nil
+	}
+
+	key, err := crypto.GetOrCreateKey()
+	if err != nil {
+		return nil, err
+	}
+
+	encryptionKey = key
+	return key, nil
 }
 
 // Load carga la configuración desde el archivo
@@ -50,10 +70,27 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("error al parsear configuración: %w", err)
 	}
 
+	// Desencriptar tokens
+	key, err := getEncryptionKey()
+	if err != nil {
+		return nil, fmt.Errorf("error obteniendo llave de encriptación: %w", err)
+	}
+
+	for i := range cfg.Accounts {
+		if crypto.IsEncrypted(cfg.Accounts[i].Token) {
+			decrypted, err := crypto.Decrypt(cfg.Accounts[i].Token, key)
+			if err != nil {
+				// Si falla la desencriptación, el token podría estar en texto plano (migración)
+				continue
+			}
+			cfg.Accounts[i].Token = decrypted
+		}
+	}
+
 	return &cfg, nil
 }
 
-// Save guarda la configuración en el archivo
+// Save guarda la configuración en el archivo con tokens encriptados
 func (c *Config) Save() error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -69,7 +106,31 @@ func (c *Config) Save() error {
 		return fmt.Errorf("error al crear directorio de configuración: %w", err)
 	}
 
-	data, err := json.MarshalIndent(c, "", "  ")
+	// Obtener llave de encriptación
+	key, err := getEncryptionKey()
+	if err != nil {
+		return fmt.Errorf("error obteniendo llave de encriptación: %w", err)
+	}
+
+	// Crear copia para encriptar tokens
+	configToSave := &Config{
+		Accounts: make([]Account, len(c.Accounts)),
+	}
+
+	for i, acc := range c.Accounts {
+		configToSave.Accounts[i] = acc
+
+		// Solo encriptar si no está ya encriptado
+		if !crypto.IsEncrypted(acc.Token) {
+			encrypted, err := crypto.Encrypt(acc.Token, key)
+			if err != nil {
+				return fmt.Errorf("error encriptando token: %w", err)
+			}
+			configToSave.Accounts[i].Token = encrypted
+		}
+	}
+
+	data, err := json.MarshalIndent(configToSave, "", "  ")
 	if err != nil {
 		return fmt.Errorf("error al serializar configuración: %w", err)
 	}
